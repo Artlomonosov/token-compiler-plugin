@@ -28,26 +28,9 @@ const THEMES: { id: Theme; label: string; icon: string }[] = [
 
 type Status = 'idle' | 'loading' | 'success' | 'error'
 
-const LS_TOKEN = 'tc_figma_token'
-const LS_FILE_KEY = 'tc_figma_file_key'
-
-function getSafeStorage(key: string): string {
-    try { return localStorage.getItem(key) ?? '' }
-    catch { return '' }
-}
-function setSafeStorage(key: string, value: string) {
-    try { localStorage.setItem(key, value) }
-    catch { }
-}
-
 // ─── App ─────────────────────────────────────────────────────────────────────
 
 export default function App() {
-    // settings
-    const [token, setToken] = useState(() => getSafeStorage(LS_TOKEN))
-    const [fileKey, setFileKey] = useState(() => getSafeStorage(LS_FILE_KEY))
-    const [showToken, setShowToken] = useState(false)
-
     // token source
     const [figmaTokens, setFigmaTokens] = useState<AllTokens | null>(null)
     const [figmaStatus, setFigmaStatus] = useState<Status>('idle')
@@ -64,10 +47,6 @@ export default function App() {
     const [previewLabel, setPreviewLabel] = useState('')
 
     const figmaTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-    // persist credentials
-    useEffect(() => { setSafeStorage(LS_TOKEN, token) }, [token])
-    useEffect(() => { setSafeStorage(LS_FILE_KEY, fileKey) }, [fileKey])
 
     // listen for Figma plugin messages (when running inside Figma iframe)
     useEffect(() => {
@@ -99,66 +78,15 @@ export default function App() {
         setFigmaMsg(`✓ ${msg.variables.length} vars · ${msg.collections.length} collections${names ? ` (${names})` : ''}`)
     }
 
-    // ── Fetch from Figma REST API (works in any browser, no plugin needed) ──────
-    const handleFetchAPI = useCallback(async () => {
-        if (!token.trim()) {
-            setFigmaStatus('error')
-            setFigmaMsg('Введи Figma Personal Access Token')
-            return
-        }
-        if (!fileKey.trim()) {
-            setFigmaStatus('error')
-            setFigmaMsg('Введи File Key из URL файла Figma')
-            return
-        }
-
-        setFigmaStatus('loading')
-        setFigmaMsg('Запрашиваю переменные из Figma API…')
-
-        try {
-            const url = `https://api.figma.com/v1/files/${fileKey.trim()}/variables/local`
-            const res = await fetch(url, { headers: { 'X-Figma-Token': token.trim() } })
-
-            if (!res.ok) {
-                const txt = await res.text()
-                throw new Error(`${res.status} ${res.statusText}: ${txt.slice(0, 200)}`)
-            }
-
-            const json = await res.json()
-            const { variables, variableCollections } = json.meta
-
-            // Convert REST API format → FigmaTokenMessage format
-            const collections = Object.values(variableCollections as Record<string, {
-                id: string; name: string; modes: { modeId: string; name: string }[]; variableIds: string[]
-            }>).map(c => ({ id: c.id, name: c.name, modes: c.modes, variableIds: c.variableIds }))
-
-            const variablesArr = Object.values(variables as Record<string, {
-                id: string; name: string; variableCollectionId: string;
-                resolvedType: string; valuesByMode: Record<string, unknown>
-            }>).map(v => ({
-                id: v.id,
-                name: v.name,
-                collectionId: v.variableCollectionId,
-                type: v.resolvedType as 'COLOR' | 'FLOAT' | 'STRING' | 'BOOLEAN',
-                valuesByMode: v.valuesByMode as Record<string, import('./lib/types').FigmaVarValue>,
-            }))
-
-            applyFigmaData({ type: 'TOKENS_DATA', collections, variables: variablesArr })
-        } catch (err) {
-            setFigmaStatus('error')
-            setFigmaMsg(`Ошибка: ${err instanceof Error ? err.message : String(err)}`)
-        }
-    }, [token, fileKey])
-
     // ── Sync via Figma plugin (when running inside Figma) ──────────────────────
     const handlePluginSync = useCallback(() => {
         setFigmaStatus('loading')
-        setFigmaMsg('Запрашиваю переменные из Figma plugin…')
+        setFigmaMsg('Запрашиваю переменные…')
         parent.postMessage({ pluginMessage: { type: 'REQUEST_TOKENS' } }, '*')
         figmaTimeoutRef.current = setTimeout(() => {
             setFigmaStatus('error')
-            setFigmaMsg('Нет ответа от плагина. Используй кнопку «Fetch via API» для standalone режима.')
-        }, 3000)
+            setFigmaMsg('Нет ответа от плагина. Убедись, что плагин запущен внутри Figma.')
+        }, 4000)
     }, [])
 
     // ── Compile ────────────────────────────────────────────────────────────────
@@ -210,69 +138,16 @@ export default function App() {
                 </div>
             </div>
 
-            {/* ── Settings: Figma Credentials ── */}
+            {/* ── Figma Sync ── */}
             <div className="card">
-                <div className="card-title">Figma — источник токенов</div>
-
-                <div className="input-row">
-                    <label className="input-label">Personal Access Token</label>
-                    <div className="input-wrap">
-                        <input
-                            id="figma-token"
-                            className="token-input"
-                            type={showToken ? 'text' : 'password'}
-                            placeholder="figd_xxxxxxxxxxxxxxxxxxxx"
-                            value={token}
-                            onChange={e => { setToken(e.target.value); setFigmaTokens(null) }}
-                            spellCheck={false}
-                            autoComplete="off"
-                        />
-                        <button
-                            className="eye-btn"
-                            onClick={() => setShowToken(v => !v)}
-                            title={showToken ? 'Скрыть' : 'Показать'}
-                        >
-                            {showToken ? '🙈' : '👁️'}
-                        </button>
-                    </div>
-                    <span className="input-hint">
-                        Figma → Settings → Personal access tokens
-                    </span>
-                </div>
-
-                <div className="input-row" style={{ marginTop: 12 }}>
-                    <label className="input-label">File Key</label>
-                    <input
-                        id="figma-file-key"
-                        className="token-input"
-                        type="text"
-                        placeholder="AbCdEfGhIjKlMnOp"
-                        value={fileKey}
-                        onChange={e => { setFileKey(e.target.value); setFigmaTokens(null) }}
-                        spellCheck={false}
-                    />
-                    <span className="input-hint">
-                        Из URL файла: figma.com/file/<strong>FILE_KEY</strong>/...
-                    </span>
-                </div>
-
-                <div className="sync-row">
-                    <button
-                        className={`sync-btn primary ${figmaStatus === 'success' ? 'synced' : ''}`}
-                        onClick={handleFetchAPI}
-                        disabled={figmaStatus === 'loading'}
-                    >
-                        {figmaStatus === 'loading' ? '⏳ Загрузка…' : '🌐 Fetch via Figma API'}
-                    </button>
-                    <button
-                        className="sync-btn"
-                        onClick={handlePluginSync}
-                        disabled={figmaStatus === 'loading'}
-                        title="Только если плагин запущен внутри Figma"
-                    >
-                        🔌 Plugin sync
-                    </button>
-                </div>
+                <div className="card-title">Источник токенов</div>
+                <button
+                    className={`sync-btn primary full-width ${figmaStatus === 'success' ? 'synced' : ''}`}
+                    onClick={handlePluginSync}
+                    disabled={figmaStatus === 'loading'}
+                >
+                    {figmaStatus === 'loading' ? '⏳ Загрузка…' : '🔌 Plugin sync'}
+                </button>
 
                 {/* status */}
                 {figmaStatus !== 'idle' && (
@@ -288,13 +163,6 @@ export default function App() {
                         {figmaColNames.map(name => (
                             <span key={name} className="collection-tag">{name}</span>
                         ))}
-                    </div>
-                )}
-
-                {/* fallback note */}
-                {!figmaTokens && figmaStatus !== 'loading' && (
-                    <div className="fallback-note">
-                        📂 Без данных Figma — компиляция из <code>public/tokens/*.json</code>
                     </div>
                 )}
             </div>
@@ -401,7 +269,7 @@ export default function App() {
                 )}
             </div>
 
-            <div className="footer">Token Compiler v1.2 · Figma API + Plugin + JSON · Web / iOS / Android</div>
+            <div className="footer">Token Compiler v1.2 · Plugin sync · Web / iOS / Android</div>
         </div>
     )
 }

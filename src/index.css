@@ -553,6 +553,14 @@ body,
   transform: none;
 }
 
+.sync-btn.full-width {
+  width: 100%;
+  padding: 14px 16px;
+  font-size: 14px;
+  margin-top: 2px;
+}
+
+
 /* ---- Collection Tags ---- */
 .collections-list {
   display: flex;
