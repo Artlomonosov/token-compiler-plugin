@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Token Compiler</title>
+  <style>
+    #error-log {
+      display: none;
+      background: #800;
+      color: #fff;
+      padding: 20px;
+      font-family: monospace;
+      white-space: pre-wrap;
+      position: absolute;
+      z-index: 9999;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      overflow: auto;
+    }
+  </style>
+  <script>
+    window.onerror = function (msg, url, line, col, error) {
+      var el = document.getElementById('error-log');
+      if (el) { el.style.display = 'block'; el.innerText += '\\n[Error] ' + msg + '\\n' + (error ? error.stack : ''); }
+    };
+    window.onunhandledrejection = function (event) {
+      var el = document.getElementById('error-log');
+      if (el) { el.style.display = 'block'; el.innerText += '\\n[Promise] ' + event.reason; }
+    };
+  </script>
+</head>
+
+<body>
+  <div id="error-log"></div>
+  <div id="root"></div>
+  <script type="module" src="/src/main.tsx"></script>
+</body>
+
+</html>

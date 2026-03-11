@@ -1,0 +1,29 @@
+{
+  "name": "token-plugin",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "postbuild": "node scripts/fix-figma-html.mjs",
+    "lint": "eslint .",
+    "preview": "vite preview",
+    "sync:figma": "node scripts/sync-figma-tokens.mjs"
+  },
+  "dependencies": {
+    "jszip": "^3.10.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@figma/plugin-typings": "^1.123.0",
+    "@types/react": "^18.3.1",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.1",
+    "esbuild": "^0.27.3",
+    "typescript": "^5.5.3",
+    "vite": "^5.4.8",
+    "vite-plugin-singlefile": "^2.3.0"
+  }
+}

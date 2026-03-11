@@ -1,0 +1,15 @@
+{
+  "tokenSetOrder": [
+    "global",
+    "Theme/Light",
+    "Theme/Dark",
+    "Product/b2b",
+    "Product/b2c",
+    "Product/points",
+    "Base/Mode 1",
+    "Platform/Web",
+    "Platform/iOS",
+    "Platform/Android",
+    "Platform/Web mobile"
+  ]
+}
