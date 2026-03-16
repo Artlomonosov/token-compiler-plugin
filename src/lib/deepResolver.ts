@@ -201,3 +201,26 @@ export function deepResolve(
 
     return results
 }
+
+/**
+ * Resolve Base collection tokens directly (without product/theme context).
+ * Base tokens are raw primitives: Color.Slate.850, Radius.control-m, Font Size.body-l, etc.
+ * References within Base (if any) are resolved within Base itself.
+ */
+export function resolveBaseTokens(options: DeepResolveOptions): ResolvedToken[] {
+    // Build lookup map from Base only (self-referential resolution)
+    const lookupMap = flattenTree(options.base)
+
+    const results: ResolvedToken[] = []
+    for (const [tokenName, node] of lookupMap.entries()) {
+        if (node.$value === undefined) continue
+        const { value, type } = resolveValue(node.$value, lookupMap)
+        results.push({
+            name: tokenName,
+            value,
+            type: node.$type ?? type,
+        })
+    }
+    return results
+}
+

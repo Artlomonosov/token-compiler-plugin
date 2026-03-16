@@ -1,1 +1,1 @@
-{"root":["./src/app.tsx","./src/code.ts","./src/main.tsx","./src/lib/deepresolver.ts","./src/lib/figmaresolver.ts","./src/lib/formatters.ts","./src/lib/tokenloader.ts","./src/lib/types.ts","./src/lib/zipbuilder.ts"],"version":"5.9.3"}
+{"root":["./src/app.tsx","./src/code.ts","./src/main.tsx","./src/lib/deepresolver.ts","./src/lib/figmaresolver.ts","./src/lib/formatters.ts","./src/lib/jsonbuilder.ts","./src/lib/tokenloader.ts","./src/lib/types.ts","./src/lib/zipbuilder.ts"],"version":"5.9.3"}

@@ -45,13 +45,15 @@ function convertValue(
     value: FigmaVarValue,
     varType: string,
     varMap: Map<string, FigmaVariable>,
+    colMap: Map<string, string>,
 ): { $value: string | number; $type: string } {
     if (isAlias(value)) {
         const refVar = varMap.get(value.id)
         if (refVar) {
-            // "Color/Slate/850" → "{Color.Slate.850}"
+            const colName = colMap.get(refVar.collectionId) ?? 'Unknown'
+            // "Color/Slate/850" in "Base" → "{Base.Color.Slate.850}"
             return {
-                $value: `{${refVar.name.replace(/\//g, '.')}}`,
+                $value: `{${colName}.${refVar.name.replace(/\//g, '.')}}`,
                 $type: varType === 'COLOR' ? 'color' : varType === 'FLOAT' ? 'number' : 'text',
             }
         }
@@ -71,6 +73,7 @@ function buildTokenTree(
     variableIds: string[],
     modeId: string,
     varMap: Map<string, FigmaVariable>,
+    colMap: Map<string, string>,
 ): TokenTree {
     const tree: Record<string, unknown> = {}
 
@@ -82,7 +85,7 @@ function buildTokenTree(
             variable.valuesByMode[modeId] ?? Object.values(variable.valuesByMode)[0]
         if (modeValue === undefined) continue
 
-        const { $value, $type } = convertValue(modeValue, variable.type, varMap)
+        const { $value, $type } = convertValue(modeValue, variable.type, varMap, colMap)
 
         // Nest by "/" parts: "Color/Slate/850" → tree["Color"]["Slate"]["850"]
         const parts = variable.name.split('/')
@@ -121,6 +124,9 @@ export function figmaDataToAllTokens(data: FigmaTokenMessage): AllTokens {
     const varMap = new Map<string, FigmaVariable>()
     for (const v of data.variables) varMap.set(v.id, v)
 
+    const colMap = new Map<string, string>()
+    for (const c of data.collections) colMap.set(c.id, c.name)
+
     const empty = (): TokenTree => ({})
 
     const baseCol = findCol(data.collections, ['base', 'primitive'])
@@ -132,7 +138,7 @@ export function figmaDataToAllTokens(data: FigmaTokenMessage): AllTokens {
         col ? (findMode(col, names)?.modeId ?? '') : ''
 
     const build = (col: FigmaCollection | undefined, mid: string) =>
-        col && mid ? buildTokenTree(col.variableIds, mid, varMap) : empty()
+        col && mid ? buildTokenTree(col.variableIds, mid, varMap, colMap) : empty()
 
     return {
         base: build(baseCol, baseCol?.modes[0]?.modeId ?? ''),

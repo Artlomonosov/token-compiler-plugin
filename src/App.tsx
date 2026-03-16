@@ -1,31 +1,20 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
-import type { Product, Theme, Platform } from './lib/deepResolver'
-import { deepResolve } from './lib/deepResolver'
+import type { Platform } from './lib/deepResolver'
 import { loadAllTokens } from './lib/tokenLoader'
 import type { AllTokens } from './lib/tokenLoader'
-import { buildZip, downloadBlob } from './lib/zipBuilder'
-import type { CompileEntry } from './lib/zipBuilder'
-import type { ResolvedToken } from './lib/deepResolver'
+import { buildJsonZip, downloadBlob } from './lib/zipBuilder'
 import { figmaDataToAllTokens, detectCollections } from './lib/figmaResolver'
 import type { FigmaMessage, FigmaTokenMessage } from './lib/types'
 
 // ─── Config ─────────────────────────────────────────────────────────────────
 
-const PRODUCTS: { id: Product; label: string }[] = [
-    { id: 'b2b', label: 'B2B' },
-    { id: 'b2c', label: 'B2C' },
-    { id: 'points', label: 'Points' },
-]
+
+
 const PLATFORMS: { id: Platform; label: string; icon: string }[] = [
     { id: 'web', label: 'Web', icon: '🌐' },
     { id: 'ios', label: 'iOS', icon: '🍎' },
     { id: 'android', label: 'Android', icon: '🤖' },
 ]
-const THEMES: { id: Theme; label: string; icon: string }[] = [
-    { id: 'light', label: 'Light', icon: '☀️' },
-    { id: 'dark', label: 'Dark', icon: '🌙' },
-]
-
 type Status = 'idle' | 'loading' | 'success' | 'error'
 
 // ─── App ─────────────────────────────────────────────────────────────────────
@@ -38,13 +27,10 @@ export default function App() {
     const [figmaColNames, setFigmaColNames] = useState<string[]>([])
 
     // compilation
-    const [selectedProducts, setSelectedProducts] = useState<Set<Product>>(new Set(['b2b']))
-    const [selectedPlatforms, setSelectedPlatforms] = useState<Set<Platform>>(new Set(['web']))
-    const [selectedThemes, setSelectedThemes] = useState<Set<Theme>>(new Set(['light', 'dark']))
+    const [selectedPlatforms, setSelectedPlatforms] = useState<Set<Platform>>(new Set(['web', 'ios', 'android']))
+    const [exportBase, setExportBase] = useState(true)
     const [status, setStatus] = useState<Status>('idle')
-    const [statusMsg, setStatusMsg] = useState('Select products & platforms, then compile.')
-    const [preview, setPreview] = useState<ResolvedToken[] | null>(null)
-    const [previewLabel, setPreviewLabel] = useState('')
+    const [statusMsg, setStatusMsg] = useState('Select platforms, then compile.')
 
     const figmaTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -94,36 +80,27 @@ export default function App() {
         const next = new Set(set); next.has(id) ? next.delete(id) : next.add(id); return next
     }
 
-    const canCompile = selectedProducts.size > 0 && selectedPlatforms.size > 0 && selectedThemes.size > 0
+    const canCompile = selectedPlatforms.size > 0
     const source = figmaTokens ? '🔗 Figma API' : '📂 JSON'
 
     const handleCompile = useCallback(async () => {
-        setStatus('loading'); setStatusMsg('Загружаю токены…'); setPreview(null)
+        setStatus('loading'); setStatusMsg('Загружаю токены…')
         try {
             const tokens = figmaTokens ?? await loadAllTokens()
-            setStatusMsg(`Резолвинг (${figmaTokens ? 'Figma' : 'JSON'})…`)
-            const entries: CompileEntry[] = []
-            let total = 0
-            for (const product of selectedProducts) {
-                for (const theme of selectedThemes) {
-                    for (const platform of selectedPlatforms) {
-                        const resolved = deepResolve(tokens, product, theme, platform)
-                        entries.push({ product, theme, platform, tokens: resolved })
-                        total += resolved.length
-                        setPreview(resolved); setPreviewLabel(`${product} / ${theme} / ${platform}`)
-                    }
-                }
-            }
-            setStatusMsg('Собираю ZIP…')
-            const blob = await buildZip(entries)
+            setStatusMsg('Собираю JSON Bundle…')
+
+            const blob = await buildJsonZip(tokens, selectedPlatforms, exportBase)
             downloadBlob(blob, 'tokens.zip')
+
             setStatus('success')
-            setStatusMsg(`✓ ${entries.length} файлов · ${total} токенов · источник: ${source}`)
+            const fileCount = selectedPlatforms.size + (exportBase ? 1 : 0)
+            setStatusMsg(`✓ ${fileCount} файлов (DTCG JSON) · источник: ${source}`)
         } catch (err) {
             setStatus('error')
             setStatusMsg(`Ошибка: ${err instanceof Error ? err.message : String(err)}`)
         }
-    }, [selectedProducts, selectedPlatforms, selectedThemes, figmaTokens, source])
+    }, [selectedPlatforms, exportBase, figmaTokens, source])
+
 
     // ─── Render ──────────────────────────────────────────────────────────────────
 
@@ -167,24 +144,7 @@ export default function App() {
                 )}
             </div>
 
-            {/* ── Products ── */}
-            <div className="card">
-                <div className="card-title">Продукты</div>
-                <div className="checkbox-grid">
-                    {PRODUCTS.map(p => (
-                        <label
-                            key={p.id}
-                            className={`checkbox-item ${selectedProducts.has(p.id) ? 'checked' : ''}`}
-                            onClick={() => setSelectedProducts(prev => toggle(prev, p.id))}
-                        >
-                            <span className="check-box" /><span className="item-label">{p.label}</span>
-                            <span className="item-badge">●</span>
-                        </label>
-                    ))}
-                </div>
-            </div>
-
-            {/* ── Platforms ── */}
+            {/* ── Platforms & Base ── */}
             <div className="card">
                 <div className="card-title">Платформы</div>
                 <div className="checkbox-grid">
@@ -199,23 +159,18 @@ export default function App() {
                         </label>
                     ))}
                 </div>
+                <div className="divider" style={{ margin: '14px 0' }} />
+                <label
+                    className={`checkbox-item ${exportBase ? 'checked' : ''}`}
+                    onClick={() => setExportBase(b => !b)}
+                    style={{ width: '100%' }}
+                >
+                    <span className="check-box" />
+                    <span className="item-label">Export <strong>Base Primitives</strong> separately</span>
+                </label>
             </div>
 
-            {/* ── Themes ── */}
-            <div className="card">
-                <div className="card-title">Темы</div>
-                <div className="theme-grid">
-                    {THEMES.map(t => (
-                        <button
-                            key={t.id}
-                            className={`theme-btn ${selectedThemes.has(t.id) ? 'active' : ''}`}
-                            onClick={() => setSelectedThemes(prev => toggle(prev, t.id))}
-                        >
-                            {t.icon} {t.label}
-                        </button>
-                    ))}
-                </div>
-            </div>
+
 
             {/* ── Export ── */}
             <div className="card action-area">
@@ -223,7 +178,7 @@ export default function App() {
                 {canCompile && (
                     <div className="status idle" style={{ marginBottom: 4 }}>
                         <span className="status-dot" />
-                        {selectedProducts.size * selectedThemes.size * selectedPlatforms.size} файл(а) · источник: <strong>{source}</strong>
+                        {selectedPlatforms.size + (exportBase ? 1 : 0)} файл(а) DTCG JSON · источник: <strong>{source}</strong>
                     </div>
                 )}
                 <button
@@ -231,45 +186,14 @@ export default function App() {
                     disabled={!canCompile || status === 'loading'}
                     onClick={handleCompile}
                 >
-                    {status === 'loading' ? '⏳ Компиляция…' : '📦 Compile & Download ZIP'}
+                    {status === 'loading' ? '⏳ Компиляция JSON…' : '📦 Generate JSON Bundle'}
                 </button>
                 <div className={`status ${status}`}>
                     <span className="status-dot" />{statusMsg}
                 </div>
-
-                {preview && preview.length > 0 && (
-                    <>
-                        <div className="divider" />
-                        <div className="card-title" style={{ marginBottom: 8 }}>
-                            Превью — {previewLabel} ({preview.length} токенов)
-                        </div>
-                        <div className="preview">
-                            {preview.slice(0, 60).map((tok, i) => (
-                                <div key={i} className="preview-token">
-                                    <span className="preview-name">{tok.name}</span>
-                                    <span className="preview-value">
-                                        {typeof tok.value === 'string' && tok.value.startsWith('#') && (
-                                            <span style={{
-                                                display: 'inline-block', width: 10, height: 10, borderRadius: 2,
-                                                background: tok.value, marginRight: 5, verticalAlign: 'middle',
-                                                border: '1px solid rgba(255,255,255,0.15)',
-                                            }} />
-                                        )}
-                                        {String(tok.value)}
-                                    </span>
-                                </div>
-                            ))}
-                            {preview.length > 60 && (
-                                <div style={{ color: 'var(--text-muted)', paddingTop: 6 }}>
-                                    …и ещё {preview.length - 60} токенов
-                                </div>
-                            )}
-                        </div>
-                    </>
-                )}
             </div>
 
-            <div className="footer">Token Compiler v1.2 · Plugin sync · Web / iOS / Android</div>
+            <div className="footer">Token Compiler v1.2 · Plugin sync</div>
         </div>
     )
 }
